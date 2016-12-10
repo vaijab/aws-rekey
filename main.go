@@ -11,70 +11,83 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// aws-rekey --profile vaijab
-// aws-rekey -c /home/vaijab/.aws/credentials
-// aws-rekey --all-profiles
-// aws-rekey --daemon
+var (
+	// Version is set at compile time, passing -ldflags "-X main.Version=<build version>"
+	Version  string
+	logFatal *log.Logger
+	logInfo  *log.Logger
+)
+
+func init() {
+	logFatal = log.New(os.Stderr, "[error] ", log.Lshortfile)
+	logInfo = log.New(os.Stderr, "[info] ", log.Lshortfile)
+}
 
 func main() {
 	credentialsFile := flag.String("credentials-file", "", "The aws credentials file path")
-	profile := flag.String("profile", "default", "The aws credentials profile name")
-	// allProfiles := flag.Bool("all-profiles", false, "Re-key all available proviles in the aws credentials file")
+	profile := flag.String("profiles", "default", "The aws credentials profile name(s), comma separated")
 	flag.Parse()
 
 	if len(*credentialsFile) == 0 {
 		f, err := lookupCredsFile()
 		if err != nil {
-			log.Fatal(err)
+			logFatal.Fatal(err)
 		}
 		*credentialsFile = f
 	}
 
-	sess := session.New(&aws.Config{Credentials: credentials.NewSharedCredentials(*credentialsFile, *profile)})
-	// sess := session.New(&aws.Config{Credentials: credentials.NewCredentials(&credentials.SharedCredentialsProvider{Profile: *profile})})
-	creds, err := sess.Config.Credentials.Get()
+	// Load credentials file and fail hard if an error occurs
+	cfg, err := loadCredsFile(*credentialsFile)
 	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("AccessKeyID = %+v\nSecretAccessKey = %v\n", creds.AccessKeyID, creds.SecretAccessKey)
-
-	client := iam.New(sess)
-	user, err := client.GetUser(&iam.GetUserInput{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("user = %+v\n", *user.User.UserName)
-
-	newCreds, err := createAccessKey(client, user.User.UserName)
-	if err != nil {
-		log.Fatal(err)
+		logFatal.Fatal(err)
 	}
 
-	cfg, err := ini.Load(*credentialsFile)
-	if err != nil {
-		log.Fatal(err)
+	// Split comma separated list of profile names into profiles slice and trim
+	// any leading/trailing commas
+	profiles := strings.Split(strings.Trim(*profile, ","), ",")
+
+	for _, p := range profiles {
+		// Create a new session for profile p
+		sess := session.New(&aws.Config{Credentials: credentials.NewSharedCredentials(*credentialsFile, p)})
+		oldCreds, err := sess.Config.Credentials.Get()
+		if err != nil {
+			logFatal.Fatalf("[%s] failed to read existing credentials: %s.\n", p, err)
+		}
+
+		client := iam.New(sess)
+		user, err := client.GetUser(&iam.GetUserInput{})
+		if err != nil {
+			logFatal.Fatalf("[%s] failed to get the IAM user name: %s.\n", p, err)
+		}
+
+		// Create a new access key and fail hard if an error occurs
+		newCreds, err := newAccessKey(client, user.User.UserName)
+		if err != nil {
+			logFatal.Fatalf("[%s] failed to create a new access key: %s.\n", p, err)
+		}
+
+		// Write the new access key to the credentials file, if an error
+		// occurs, print the new key to stdout
+		section := cfg.Section(p)
+		section.Key("aws_access_key_id").SetValue(*newCreds.AccessKey.AccessKeyId)
+		section.Key("aws_secret_access_key").SetValue(*newCreds.AccessKey.SecretAccessKey)
+		if err := cfg.SaveTo(*credentialsFile); err != nil {
+			logFatal.Printf("[%s] failed to write new access key to %s: %s.\n", p, *credentialsFile, err)
+			fmt.Printf("aws_access_key_id: %s\naws_secret_access_key: %s\n",
+				*newCreds.AccessKey.AccessKeyId,
+				*newCreds.AccessKey.SecretAccessKey,
+			)
+		}
+
+		logInfo.Printf("[%s] new access key created: %s.\n", p, *newCreds.AccessKey.AccessKeyId)
+
+		if err := deleteAccessKey(client, user.User.UserName, &oldCreds.AccessKeyID); err != nil {
+			logFatal.Fatalf("[%s] failed to delete old access key: %s: %s.\n", p, oldCreds.AccessKeyID, err)
+		}
 	}
-	section := cfg.Section(*profile)
-	section.Key("aws_access_key_id").SetValue(*newCreds.AccessKey.AccessKeyId)
-	section.Key("aws_secret_access_key").SetValue(*newCreds.AccessKey.SecretAccessKey)
-	if err := cfg.SaveTo(*credentialsFile); err != nil {
-		log.Fatal(err)
-	}
-
-	err = deleteAccessKey(client, user.User.UserName, &creds.AccessKeyID)
-	if err != nil {
-		log.Fatal(err)
-	}
-	// load credentials file
-
-	// create a new access key
-
-	// write the new access key to the credentials file
-
-	// delete the old access key
-
 }
 
 // lookupCredsFile is a helper which looks up aws shared credentials file in
@@ -89,30 +102,28 @@ func lookupCredsFile() (string, error) {
 		homeDir = os.Getenv("USERPROFILE") // windows
 	}
 	if homeDir == "" {
-		return "", fmt.Errorf("Unable to find AWS shared credentials file.\n")
+		return "", fmt.Errorf("unable to find AWS shared credentials file.\n")
 	}
 
 	return filepath.Join(homeDir, ".aws", "credentials"), nil
 }
 
-// loadCredsFile loads the credentials file. It will return a *ini.File struct.
+// loadCredsFile loads the credentials file. It will return a *ini.File struct
+// and an error if any.
 func loadCredsFile(file string) (*ini.File, error) {
-
-	return &ini.File{}, nil
+	cfg, err := ini.Load(file)
+	if err != nil {
+		return &ini.File{}, err
+	}
+	return cfg, nil
 }
 
-func createAccessKey(client *iam.IAM, username *string) (*iam.CreateAccessKeyOutput, error) {
+func newAccessKey(client *iam.IAM, username *string) (*iam.CreateAccessKeyOutput, error) {
 	attr := &iam.CreateAccessKeyInput{UserName: username}
 	resp, err := client.CreateAccessKey(attr)
 	if err != nil {
 		return &iam.CreateAccessKeyOutput{}, err
 	}
-	// FIXME: remove below
-	fmt.Printf(
-		"New access keys:\n- AccessKeyID = %+v\n- SecretAccessKey = %v\n",
-		*resp.AccessKey.AccessKeyId,
-		*resp.AccessKey.SecretAccessKey,
-	)
 	return resp, err
 }
 
