@@ -1,0 +1,27 @@
+language: go
+go: 1.7
+
+install: true
+script:
+  - go test -v -cover
+  - go vet -x
+  - mkdir -p bin
+  - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X main.Version=${TRAVIS_TAG:-git+${TRAVIS_COMMIT}}" -o bin/aws-rekey_linux_amd64
+  - GOOS=linux GOARCH=386 CGO_ENABLED=0 go build -ldflags "-X main.Version=${TRAVIS_TAG:-git+${TRAVIS_COMMIT}}" -o bin/aws-rekey_linux_386
+  - GOOS=linux GOARCH=arm CGO_ENABLED=0 go build -ldflags "-X main.Version=${TRAVIS_TAG:-git+${TRAVIS_COMMIT}}" -o bin/aws-rekey_linux_arm
+  - GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X main.Version=${TRAVIS_TAG:-git+${TRAVIS_COMMIT}}" -o bin/aws-rekey_darwin_amd64
+  - GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags "-X main.Version=${TRAVIS_TAG:-git+${TRAVIS_COMMIT}}" -o bin/aws-rekey_windows_amd64.exe
+deploy:
+  provider: releases
+  skip_cleanup: true
+  api_key:
+    secure: WuwROcUrR5y/S3TozBj/Nt6z3MOGklQ3vySEyrG9N8lUbQt1+gGL6xeaQLBnCEmehkP1CshyAfTmwO7ogl2YtzGRjuR1XAbFftz0SC8U9j3F/r2IrjF22fngeRqKpua/WnGXPasA8AgBpHUUy53p+KLrlg/K1mHza1gOJ1zWilasLR2XcmMi4k7GKurRsSLpL/94UFgm3RJl/POwzHLMl1olUYKuxQ0xU3zzZvVVQE/Z8JxSFVM3uJ5fLBn/ZN2xBrcdn7B7KeRQXdEefYyIj9SIKx712DtfBfXixF55MkwizEsHFKSfhkaU3wgw2nfmdwF+5n2humvbNrRaUunZdRfEDYpGDCWAbr8dKHtR+wqW/9TfnC5Rq6bKvDPuzUVF9SsjO+fc5w0c4/XYv3MtVtg68JrhwBF2I9HfIh2bGlxOlD4JCv67aX/5GegA8WU1sndYGcRKCsvkJUpY9/7A+UusR2xg242XjiziL+ZVhDf3N1tGpehoY0TWW/EkaYxuqv7omckuxcndWpGx+2OVPa8WxRnLfTGBPacShoTDmeHDWOGB6rxc2VzvBiX3U91tdczjXIynNCNoi8buyRfXw3kQv9eMt3SR1RKAmfxtSxAKh4RNnC8ShwhwXwi/F6qCMZ0RhEjDKaaMDefVB6jaYWsYsxSUg2OdFJDp3B0i+yI=
+  file:
+    - ${TRAVIS_BUILD_DIR}/bin/aws-rekey_linux_amd64
+    - ${TRAVIS_BUILD_DIR}/bin/aws-rekey_linux_386
+    - ${TRAVIS_BUILD_DIR}/bin/aws-rekey_linux_arm
+    - ${TRAVIS_BUILD_DIR}/bin/aws-rekey_darwin_amd64
+    - ${TRAVIS_BUILD_DIR}/bin/aws-rekey_windows_amd64.exe
+  on:
+    tags: true
+    repo: vaijab/aws-rekey

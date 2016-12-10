@@ -1,4 +1,5 @@
 # aws-rekey
+[![Build Status](https://travis-ci.org/vaijab/aws-rekey.svg?branch=master)](https://travis-ci.org/vaijab/aws-rekey)
 
 Re-key your static AWS API access keys.
 
