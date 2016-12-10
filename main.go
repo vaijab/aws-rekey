@@ -27,9 +27,15 @@ func init() {
 }
 
 func main() {
+	version := flag.Bool("version", false, "Show version and exit")
 	credentialsFile := flag.String("credentials-file", "", "The aws credentials file path")
 	profile := flag.String("profiles", "default", "The aws credentials profile name(s), comma separated")
 	flag.Parse()
+
+	if *version {
+		fmt.Printf("aws-rekey %s\n", Version)
+		os.Exit(0)
+	}
 
 	if len(*credentialsFile) == 0 {
 		f, err := lookupCredsFile()
