@@ -3,15 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/go-ini/ini"
-	"log"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 var (
@@ -130,7 +131,7 @@ func newAccessKey(client *iam.IAM, username *string) (*iam.CreateAccessKeyOutput
 	if err != nil {
 		return &iam.CreateAccessKeyOutput{}, err
 	}
-	return resp, err
+	return resp, nil
 }
 
 func deleteAccessKey(client *iam.IAM, username, accessKeyID *string) error {
