@@ -131,7 +131,7 @@ func newAccessKey(client *iam.IAM, username *string) (*iam.CreateAccessKeyOutput
 	if err != nil {
 		return &iam.CreateAccessKeyOutput{}, err
 	}
-	return resp, nil
+	return resp, err
 }
 
 func deleteAccessKey(client *iam.IAM, username, accessKeyID *string) error {
