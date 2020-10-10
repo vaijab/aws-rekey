@@ -58,7 +58,11 @@ func main() {
 
 	for _, p := range profiles {
 		// Create a new session for profile p
-		sess := session.New(&aws.Config{Credentials: credentials.NewSharedCredentials(*credentialsFile, p)})
+		sess, err := session.NewSession(&aws.Config{Credentials: credentials.NewSharedCredentials(*credentialsFile, p)})
+		if err != nil {
+			logFatal.Fatalf("[%s] failed to create session: %s.\n", p, err)
+		}
+
 		oldCreds, err := sess.Config.Credentials.Get()
 		if err != nil {
 			logFatal.Fatalf("[%s] failed to read existing credentials: %s.\n", p, err)
@@ -94,6 +98,8 @@ func main() {
 		if err := deleteAccessKey(client, user.User.UserName, &oldCreds.AccessKeyID); err != nil {
 			logFatal.Fatalf("[%s] failed to delete old access key: %s: %s.\n", p, oldCreds.AccessKeyID, err)
 		}
+
+		logInfo.Printf("[%s] old access key deleted: %s.\n", p, oldCreds.AccessKeyID)
 	}
 }
 
@@ -109,7 +115,7 @@ func lookupCredsFile() (string, error) {
 		homeDir = os.Getenv("USERPROFILE") // windows
 	}
 	if homeDir == "" {
-		return "", fmt.Errorf("unable to find AWS shared credentials file.\n")
+		return "", fmt.Errorf("unable to find AWS shared credentials file")
 	}
 
 	return filepath.Join(homeDir, ".aws", "credentials"), nil
