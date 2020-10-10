@@ -1,0 +1,4 @@
+root = yes
+
+[{M,makefile}]
+indent_style = tab
